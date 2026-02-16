@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>PFAFF 1222E - Control Panel</title>
-    <!-- Bibliothèques (React, Lucide, Tailwind) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -12,31 +11,9 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
-        body { 
-            font-family: 'Inter', sans-serif; 
-            background-color: #0c0a09;
-            color: #f5f5f4;
-            user-select: none;
-            -webkit-tap-highlight-color: transparent;
-        }
-        /* Curseur tactile rouge */
-        input[type="range"] {
-            -webkit-appearance: none;
-            background: #292524;
-            height: 10px;
-            border-radius: 5px;
-            width: 100%;
-        }
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            height: 38px;
-            width: 38px;
-            border-radius: 50%;
-            background: #e30613;
-            border: 4px solid #fff;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5);
-            cursor: pointer;
-        }
+        body { font-family: 'Inter', sans-serif; background-color: #0c0a09; color: #f5f5f4; user-select: none; -webkit-tap-highlight-color: transparent; }
+        input[type="range"] { -webkit-appearance: none; background: #292524; height: 10px; border-radius: 5px; width: 100%; }
+        input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; height: 40px; width: 40px; border-radius: 50%; background: #e30613; border: 4px solid #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.5); cursor: pointer; }
     </style>
 </head>
 <body>
@@ -52,21 +29,18 @@
             const [pmhDuration, setPmhDuration] = useState(450);
             const [isSaving, setIsSaving] = useState(false);
             const [showSettings, setShowSettings] = useState(false);
+            const [errorType, setErrorType] = useState(null);
             
-            // Récupère l'IP sauvegardée ou utilise le nom par défaut
             const [espIp, setEspIp] = useState(localStorage.getItem('pfaff_ip') || '192.168.1.XX');
-            
             const socketRef = useRef(null);
 
-            useEffect(() => {
-                if (window.lucide) window.lucide.createIcons();
-            });
+            useEffect(() => { if (window.lucide) window.lucide.createIcons(); });
 
-            // Fonction de connexion WebSocket
             const connect = (targetIp) => {
                 if (socketRef.current) socketRef.current.close();
-                
                 setStatus(`RECHERCHE : ${targetIp}`);
+                setErrorType(null);
+                
                 try {
                     const ws = new WebSocket(`ws://${targetIp}:81`);
                     socketRef.current = ws;
@@ -82,7 +56,7 @@
                             const data = JSON.parse(event.data);
                             if (data.status) setStatus(data.status);
                             if (data.storedPmh) setPmhDuration(data.storedPmh);
-                        } catch (e) { console.error("Erreur réception", e); }
+                        } catch (e) { }
                     };
 
                     ws.onclose = () => {
@@ -92,14 +66,19 @@
 
                     ws.onerror = () => {
                         setIsConnected(false);
-                        setStatus("IP INTROUVABLE");
+                        setStatus("ERREUR CONNEXION");
+                        // Diagnostic auto
+                        if (window.location.protocol === 'https:') {
+                            setErrorType("HTTPS_BLOCK");
+                        } else {
+                            setErrorType("IP_WRONG");
+                        }
                     };
                 } catch (e) {
-                    setStatus("ÉCHEC CONNEXION");
+                    setStatus("ÉCHEC LIAISON");
                 }
             };
 
-            // Connexion au démarrage
             useEffect(() => {
                 connect(espIp);
                 return () => { if (socketRef.current) socketRef.current.close(); };
@@ -114,11 +93,11 @@
             return (
                 <div className="min-h-screen flex flex-col items-center p-4 max-w-md mx-auto">
                     
-                    {/* Barre de Titre */}
+                    {/* Header */}
                     <div className="w-full bg-stone-900 border border-stone-800 p-4 rounded-3xl flex justify-between items-center shadow-xl mb-4">
                         <div className="flex items-center gap-3">
-                            <div className="bg-[#e30613] text-white px-4 py-1 rounded-lg font-black italic text-xl shadow-lg shadow-red-600/20">PFAFF</div>
-                            <div className="text-[10px] font-bold text-stone-500 tracking-widest uppercase">v1.1 Stable</div>
+                            <div className="bg-[#e30613] text-white px-4 py-1 rounded-lg font-black italic text-xl">PFAFF</div>
+                            <div className="text-[10px] font-bold text-stone-500 uppercase tracking-widest">v1.1 Diag</div>
                         </div>
                         <div className="flex items-center gap-4">
                             <button onClick={() => setShowSettings(!showSettings)} className="text-stone-500 active:text-white transition-colors p-2">
@@ -128,7 +107,21 @@
                         </div>
                     </div>
 
-                    {/* Fenêtre de configuration IP (Affichée quand on clique sur l'engrenage) */}
+                    {/* Alerte de Diagnostic */}
+                    {errorType && !isConnected && (
+                        <div className="w-full bg-red-900/20 border border-red-500/50 p-4 rounded-2xl mb-4 text-xs">
+                            <div className="flex items-center gap-2 text-red-500 font-black uppercase mb-1">
+                                <i data-lucide="alert-triangle" className="w-4 h-4"></i> Diagnostic
+                            </div>
+                            {errorType === "HTTPS_BLOCK" ? (
+                                <p className="text-red-200">GitHub (HTTPS) bloque la connexion vers l'IP de la machine. <br/><br/><strong>Solution :</strong> Essayez d'entrer l'IP manuellement ci-dessous ou ouvrez le lien dans un navigateur "non-sécurisé".</p>
+                            ) : (
+                                <p className="text-red-200">La machine est introuvable à l'adresse <strong>{espIp}</strong>. Vérifiez l'écran Nextion et votre WiFi.</p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Paramètres IP */}
                     {showSettings && (
                         <div className="w-full bg-stone-800 p-5 rounded-2xl mb-4 border border-stone-700 shadow-lg animate-in fade-in slide-in-from-top-4">
                             <p className="text-[10px] font-bold text-stone-400 uppercase mb-3 tracking-widest text-center">Entrez l'IP affichée sur la machine</p>
@@ -142,7 +135,7 @@
                                 />
                                 <button 
                                     onClick={() => { connect(espIp); setShowSettings(false); }}
-                                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase shadow-lg shadow-emerald-900/20"
+                                    className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-[10px] font-bold uppercase"
                                 >
                                     RELIER
                                 </button>
@@ -156,12 +149,12 @@
                     </div>
 
                     {/* Contrôle de Vitesse */}
-                    <div className="w-full bg-stone-900 rounded-[2.5rem] p-8 border border-stone-800 shadow-2xl flex flex-col items-center mb-6">
+                    <div className="w-full bg-stone-900 rounded-[2.5rem] p-8 border border-stone-800 shadow-2xl flex flex-col items-center mb-6 opacity-80">
                         <div className="relative mb-10">
                             <svg className="w-56 h-56 -rotate-90">
                                 <circle cx="112" cy="112" r="100" stroke="#292524" strokeWidth="4" fill="transparent" />
                                 <circle 
-                                    cx="112" cy="112" r="100" stroke="#e30613" strokeWidth="12" fill="transparent"
+                                    cx="112" cy="112" r="100" stroke={isConnected ? "#e30613" : "#444"} strokeWidth={12} fill="transparent"
                                     strokeDasharray={628}
                                     strokeDashoffset={628 * (1 - speed / 100)}
                                     className="transition-all duration-300 ease-out"
@@ -175,11 +168,13 @@
                         </div>
                         <input 
                             type="range" min="0" max="100" value={speed} 
+                            disabled={!isConnected}
                             onChange={(e) => {
                                 const val = parseInt(e.target.value);
                                 setSpeed(val);
                                 send("SET_SPEED", val);
                             }}
+                            className={!isConnected ? "opacity-30" : ""}
                         />
                     </div>
 
@@ -194,24 +189,21 @@
                                 <span className="font-mono text-sm text-stone-400">{pmhDuration}ms</span>
                                 <button 
                                     onClick={() => { setIsSaving(true); send("SAVE_PMH", pmhDuration); setTimeout(() => setIsSaving(false), 1000); }} 
-                                    className={`p-2 rounded-lg transition-all ${isSaving ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/40' : 'bg-stone-800 text-stone-400'}`}
+                                    className={`p-2 rounded-lg transition-all ${isSaving ? 'bg-emerald-600 text-white shadow-lg' : 'bg-stone-800 text-stone-400'}`}
                                 >
                                     <i data-lucide="save" className="w-5 h-5"></i>
                                 </button>
                             </div>
                         </div>
                         
-                        <input 
-                            type="range" min="100" max="1500" step="5" value={pmhDuration} 
-                            onChange={(e) => setPmhDuration(parseInt(e.target.value))}
-                            className="mb-10"
-                        />
+                        <input type="range" min="100" max="1500" step="5" value={pmhDuration} onChange={(e) => setPmhDuration(parseInt(e.target.value))} className="mb-10" />
 
                         <button 
+                            disabled={!isConnected}
                             onClick={() => send("VIRTUAL_PMH", pmhDuration)}
-                            className="w-full bg-stone-100 text-stone-950 rounded-2xl p-8 flex flex-col items-center gap-3 active:scale-95 transition-all shadow-xl hover:bg-white group"
+                            className={`w-full rounded-2xl p-8 flex flex-col items-center gap-3 transition-all shadow-xl active:scale-95 ${isConnected ? 'bg-stone-100 text-stone-950 hover:bg-white' : 'bg-stone-800 text-stone-600 opacity-50'}`}
                         >
-                            <i data-lucide="chevron-up" className="w-12 h-12 text-[#e30613]"></i>
+                            <i data-lucide="chevron-up" className={`w-12 h-12 ${isConnected ? 'text-[#e30613]' : 'text-stone-700'}`}></i>
                             <span className="font-black text-2xl uppercase italic tracking-tight text-center">Impulsion PMH</span>
                         </button>
                     </div>
